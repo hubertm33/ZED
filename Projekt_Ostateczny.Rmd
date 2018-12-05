@@ -23,16 +23,23 @@ library(dplyr)
 library(tidyr)
 library(data.table)
 library(knitr)
-library(Metrics)
+#library(Metrics)
 library(ggplot2)
+library(rmarkdown)
+library(ggplus)
+library(ggforce)
+library(caret)
 ```
 
 ## Wczytywanie danych
 3 set.seed() zbÄ…dny gdy wczytujemy wszytkie dane na raz
 
 ```{r Read data}
-lines <- data.table::fread('all_summary.csv', sep = ';')
-#lines2 <- read.csv('all_summary.csv',skip=5000,nrows = 5000, sep = ';')
+#WSZYSTKIE
+#lines <- data.table::fread('all_summary.csv', sep = ';')
+#KILKA
+#set.seed(42)
+#lines_part <- read.csv2('all_summary.csv',dec='.',nrows = 1000,stringsAsFactors = FALSE)
 #kable(lines, format = "latex", booktabs = TRUE)
 ```
 ## Filtrowanie res_name
@@ -41,7 +48,10 @@ lines <- data.table::fread('all_summary.csv', sep = ';')
 ```{r Delete res_name}
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
-lines_filtered <- lines %>% filter(res_name %!in% c('UNK', 'UNX', 'UNL', 'DUM', 'N', 'BLOB', 'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'MSE', 'PHE', 'PRO', 'SEC', 'SER', 'THR', 'TRP', 'TYR', 'VAL', 'DA', 'DG', 'DT', 'DC', 'DU', 'A', 'G', 'T', 'C', 'U', 'HOH', 'H20', 'WAT'))
+#lines_filtered <- lines %>% filter(res_name %!in% c('UNK', 'UNX', 'UNL', 'DUM', 'N', 'BLOB', 'ALA', 'ARG', 'ASN', #'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'MSE', 'PHE', 'PRO', 'SEC', 'SER', 'THR', 'TRP', #'TYR', 'VAL', 'DA', 'DG', 'DT', 'DC', 'DU', 'A', 'G', 'T', 'C', 'U', 'HOH', 'H20', 'WAT'))
+#KILKA
+
+lines_filtered <- lines_part %>% filter(res_name %!in% c('UNK', 'UNX', 'UNL', 'DUM', 'N', 'BLOB', 'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'MSE', 'PHE', 'PRO', 'SEC', 'SER', 'THR', 'TRP', 'TYR', 'VAL', 'DA', 'DG', 'DT', 'DC', 'DU', 'A', 'G', 'T', 'C', 'U', 'HOH', 'H20', 'WAT'))
 ```
 
 ##Kolumny z warto?ciami NA
@@ -62,28 +72,33 @@ wiersz musi mieÄ‡ obie wartoÅ›ci
   part_01 sprawdziÄ‡ystÄ™powanie dla danego res_name
 
 ```{r eval=FALSE}
-nacols <- function(df) {
-   colnames(df)[unlist(lapply(df, function(x) any(is.na(x))))]
-}
-nacols(lines_filtered) -> row_with_na_value
-lines_filtered_with_na <- lines_filtered %>% select(row_with_na_value)
+#nacols <- function(df) {
+#   colnames(df)[unlist(lapply(df, function(x) any(is.na(x))))]
+#}
+#nacols(lines_filtered) -> row_with_na_value
+#lines_filtered_with_na <- lines_filtered %>% select(row_with_na_value)
 #lines_filtered_with_na[which(is.na(.))]
-lines_filtered_without_na <- lines_filtered %>% select(-row_with_na_value)
+#lines_filtered_without_na <- lines_filtered %>% select(-row_with_na_value)
 
 #new_data <- lines %>% filter_all(any_vars(is.na(.)))
 # w danej koluminie ile jest wartoÅ›ci NA
-lines_filtered %>% 
-  select_if(function(x) any(is.na(x))) %>% 
-  summarise_each(funs(sum(is.na(.)))) -> ile_NA
+#lub lines_filtered_res_name
+#lines_filtered %>% 
+#  select_if(function(x) any(is.na(x))) %>% 
+#  summarise_each(funs(sum(is.na(.)))) -> ile_NA
 
-kable(ile_NA)
+#kable(ile_NA)
 
 # gdy res_name = NA usuwamy wiersz
 
 lines_filtered %>% drop_na(res_name) -> lines_filtered_res_name
 
+# usuwamy weight_col, bo wszystkie wiersze NA
+
+lines_filtered_res_name %>% select(-weight_col) -> lines_filtered_res_name
+
 #omija wiersze z warto?cia NA x <- na.omit(airquality)
-part_and_ligand <- lines_filtered_with_na %>% select(res_name,starts_with('part_01')) %>% group_by(res_name)
+#part_and_ligand <- lines_filtered_with_na %>% select(res_name,starts_with('part_01')) %>% group_by(res_name)
 
 ```
 
@@ -95,7 +110,7 @@ part_and_ligand <- lines_filtered_with_na %>% select(res_name,starts_with('part_
 
 dim(lines_filtered_res_name)
 summary.data.frame(lines_filtered_res_name, median) -> lines_filtered_summary
-kable(head(lines_filtered_summary))
+knitr::kable(lines_filtered_summary)
 #lines_filtered %>% summarise_all(funs(min, max, mean, sd,med = median),na.rm=TRUE)
 #podstawowe statystyki
 ```
@@ -114,7 +129,7 @@ res_name_top_50 <- head(res_name_top,50)
 sapply(lines_filtered_res_name, is.numeric) -> log_vec
 lines_filtered_res_name[which(log_vec)] -> lines_filtered_res_name_numeric
 
-correletion <-  cor(head(lines_filtered_res_name_numeric,1000), method="kendall") 
+correletion <-  cor(lines_filtered_res_name_numeric, method="kendall") 
 round(correlation, 3)
 
 ```
@@ -145,19 +160,65 @@ ggplot(lines_filtered_res_name_10,
 12
 
 ```{r eval=FALSE}
-parts_01 <- lines_filtered_res_name %>% select(starts_with('part_01'))
-parts_01_with_mean <- parts_01 %>% select(ends_with('mean')) %>% summarise_all(mean)
+#parts_01 <- lines_filtered_res_name %>% select(starts_with('part_01'))
+#parts_01_with_mean <- parts_01 %>% select(ends_with('mean')) %>% summarise_all(mean)
 #parts_01_with_mean <- parts_01 %>% summarise_all(mean,na.rm = TRUE)
 
-parts_01_trans <- as.data.frame(t(parts_01))
 
-ggplot(parts_01_trans, aes(x=)) + geom_boxplot()
-p <- ggplot(parts_01, aes(class, hwy))
-p + geom_boxplot()
+#parts_01_trans <- as.data.frame(t(parts_01))
+#nie r1 tylko pomiar
+#parts_01_trans <- data.frame(r1=names(parts_01_trans), t(parts_01_trans))
+
+#head(parts_01_trans,100) -> aaa
+
+#Aby ni by³o pêtli czy dany pomiar jest danej wartoœci i na tej wartoœci wrap
+#mdata <- melt(aaa, id=c("r1"))
+
+
+# Calculate the number of pages with 9 panels per page
+n_pages <- ceiling(
+  length(levels(mdata$variable))/ 1
+)
+
+#for (i in seq_len(n_pages)) {
+# ggplot(mdata, aes(y=value, x=r1)) + geom_point() +
+#  facet_wrap_paginate(~ variable, ncol = 1, nrow = 1, page = i)
+#}
+
+#ggsave("plot.png")
+
+p <- ggplot(mdata, aes(y=value, x=r1)) + geom_point()
+
+#png(file="name_of_img_save.png",width=3300 ,height=2000,res=150)
+pdf('Example_marrangeGrob.pdf', width = 12, height = 8)
+facet_multiple(plot = p, 
+               facets = 'variable', 
+               ncol = 1, 
+               nrow = 2)
+dev.off()
+
+#ggplot(mdata, aes(y=value, x=r1)) + geom_point() +
+#  facet_wrap( ~ variable, ncol=3)
+
 #parts_01_with_mean_without_na <- parts_01_with_mean %>%select_if(function(x) !any(is.na(x)))
 #parts_01_with_mean_with_na <- parts_01_with_mean %>%select_if(function(x) any(is.na(x)))
 #wzi?? tem kt?rema maj? warto??,a te kt?re nie maj? to pojedynczo wyci?? omit wiersze i wyliczy? podsumowanie ?redni?
 #parts_01 %>% filter
+```
+
+```{r}
+n_pages <- ceiling(
+  length(levels(diamonds$cut)) * length(levels(diamonds$clarity)) / 9
+)
+
+# Draw each page
+for (i in seq_len(n_pages)) {
+  ggplot(diamonds) +
+    geom_point(aes(carat, price), alpha = 0.1) +
+    facet_wrap_paginate(~cut:clarity, ncol = 3, nrow = 3, page = i)
+}
+
+ggsave("plot.png", width = 5, height = 5)
 ```
 
 ## NiezgodnoÅ›Ä‡
@@ -174,9 +235,8 @@ summarise_each(funs(sum(is.na(.)))) -> ile_NA_11_1
 
 lines_filtered_res_name_11_1 %>% drop_na(dict_atom_non_h_count) -> lines_filtered_res_name_11_1_without_NA
 
-rF <- function(x, a, b) cor(x[a], x[b], use =
-"complete.obs")
-lines_filtered_res_name_11_1_without_NA$rFcor<-apply(lines_filtered_res_name_11_1_without_NA,1,FUN=rF,a=2,b=3) 
+#rF <- function(x, a, b) cor(x[a], x[b], use ="complete.obs")
+#lines_filtered_res_name_11_1_without_NA$rFcor<-apply(lines_filtered_res_name_11_1_without_NA,1,FUN=rF,a=2,b=3) 
 
 lines_filtered_res_name_11_1_without_NA %>% group_by(res_name) %>% 
   summarise(mae = round(mae(local_res_atom_non_h_count,dict_atom_non_h_count), 2)) %>% arrange(desc(mae)) %>% head(10) -> res_name_cov_top
@@ -212,37 +272,91 @@ Miary: r^2, RMSE
 ```{r}
 #X - local_res_atom_non_h_count, Y - local_res_atom_non_h_electron_sum
 
-lines_filtered_res_name_numeric_X <- split(lines_filtered_res_name_numeric,lines_filtered_res_name_numeric$local_res_atom_non_h_count)
+#lines_filtered_res_name_numeric_X <- #split(lines_filtered_res_name_numeric,lines_filtered_res_name_numeric$local_res_atom_non_h_count)
 
 #1
-subset.data.frame(lines_filtered_res_name_numeric,local_res_atom_non_h_count<7) -> subset_lines_filtered_res_name_numeric
+#subset.data.frame(lines_filtered_res_name_numeric,local_res_atom_non_h_count<7) -> #subset_lines_filtered_res_name_numeric
 #2
-subset.data.frame(lines_filtered_res_name_numeric,local_res_atom_non_h_count>=7) -> v
+#subset.data.frame(lines_filtered_res_name_numeric,local_res_atom_non_h_count>=7) -> v
 
 #1
-cor(subset_lines_filtered_res_name_numeric, use = "complete.obs") -> cor_X
-#1
-cor_X[,"local_res_atom_non_h_count"] -> cor_X_ok
-#1
-cor_X_ok
-#1
-sapply(cor_X_ok,round,digits=3) -> cor_X_ok_round
-sort(abs(cor_X_ok_round), decreasing=TRUE)
-head(cor_X_ok_round,10) -> cor_X_ok_to_analysis
+cor(lines_filtered_res_name_numeric, use = "complete.obs") -> cor_X
 
-#2
-cor(subset_lines_filtered_res_name_numeric_2, use = "complete.obs") -> cor_X
-
-#2
 cor_X[,"local_res_atom_non_h_count"] -> cor_X_ok
 
-#2
-sapply(cor_X_ok,round,digits=3) -> cor_X_ok_round
-sort(abs(cor_X_ok_round), decreasing=TRUE)
-head(cor_X_ok_round,10) -> cor_X_ok_to_analysis
-#2
+cor_X[,"local_res_atom_non_h_electron_sum"] -> cor_Y_ok
 
-cor_X_ok_na <- cor_X_ok[!is.na(cor_X_ok)]
+sapply(cor_X_ok,round,digits=3) -> cor_X_ok_round
+sort(abs(cor_X_ok_round), decreasing=TRUE) -> cor_X_ok_round
+head(cor_X_ok_round,20) -> cor_X_ok_to_analysis
+#cor_X_ok_to_analysis[-c(1)] -> cor_X_ok_to_analysis
+
+sapply(cor_Y_ok,round,digits=3) -> cor_Y_ok_round
+sort(abs(cor_Y_ok_round), decreasing=TRUE) -> cor_Y_ok_round
+head(cor_Y_ok_round,20) -> cor_Y_ok_to_analysis
+#cor_Y_ok_to_analysis[-c(1)] -> cor_Y_ok_to_analysis
+
+set.seed(100)
+
+lines_part %>% select(names(cor_X_ok_to_analysis)) -> lines_part_X_analysis
+
+na.omit(lines_part_X_analysis) -> lines_part_X_analysis_row_without_NA
+
+idx <- createDataPartition(lines_part_X_analysis_row_without_NA$local_res_atom_non_h_count,
+                           p=0.7, list=F)
+
+d1 <- lines_part_X_analysis_row_without_NA[ idx,]
+d2  <- lines_part_X_analysis_row_without_NA[-idx,]
+
+ctrl <- trainControl(
+    # powtórzona ocena krzy¿owa
+    method = "repeatedcv",
+    # liczba podzia³ów
+    number = 2,
+    # liczba powtórzeñ
+    repeats = 5)
+
+#df <- subset(d1, select = -c(local_res_atom_non_h_count) )
+
+set.seed(23)
+
+my_lm = train(local_res_atom_non_h_count ~ ., data=d1,
+              method = "lm",
+              trControl=ctrl,
+              preProc = c("center", "scale")
+              )
+
+my_rf = train(local_res_atom_non_h_count ~ .,
+              data = d1,
+              method = "rf",
+              trControl=ctrl,
+              ntree = 10
+              )
+
+my_lm$results[c("RMSE","Rsquared")] %>%
+        round(2)
+summary(my_lm)
+
+pred = predict(my_lm, d2[, 2:20])
+SSE = sum((d2$local_res_atom_non_h_count - round(pred,digits = 0))^2)    # sum of squared errors
+SST = sum((d2$local_res_atom_non_h_count - mean(d2$local_res_atom_non_h_count))^2) # total sum of squares, remember to use training data here
+R_square = 1 - SSE/SST
+message('R_squared on the test data:')
+round(R_square, 2)
+SSE = sum((d2[,5] - pred)^2)
+RMSE = sqrt(SSE/length(pred))
+message("Root mean square error on the test data: ")
+round(RMSE, 2)
+
+my_data = as.data.frame(cbind(predicted = pred,
+                            observed = d2$local_res_atom_non_h_count))
+
+ggplot(my_data,aes(predicted, observed)) +
+      geom_point(color = "darkred", alpha = 0.5) + 
+      geom_smooth(method=lm)+ ggtitle('Linear Regression ')
+
+
+#cor_X_ok_na <- cor_X_ok[!is.na(cor_X_ok)]
 
 ```
 
@@ -254,6 +368,83 @@ PrzewidywaÄ‡ res_name
 PodziaÅ‚ na zbiÃ³r uczÄ…cy i testowy z stratyfikacjÄ… lub ocenÄ… krzyÅ¼owÄ…
 
 ```{r}
+
+lines_filtered_res_name[c('res_name', 'pdb_code', 'res_coverage', 'fc_col', 'blob_coverage', 'fo_col', 'skeleton_data', 'title', 'chain_id')] -> lines_filtered_res_name_no_numeric
+
+# Po analizie opisu danych usuwam title,pbd_code,res_id,skeleton_data,fo_col,fc_col,res_coverage,blob_coverage
+
+lines_filtered_res_name_to_classification <- subset(lines_filtered_res_name, select = -c(title,pdb_code,res_id,skeleton_data,fo_col,fc_col,res_coverage,blob_coverage) )
+
+
+lines_filtered_res_name_to_classification2 <-transform(lines_filtered_res_name_to_classification, chain_id = char2num(chain_id))
+
+lines_filtered_res_name_to_classification3 <-transform(lines_filtered_res_name_to_classification2, res_name = char2num(res_name))
+
+# Zmiana z reprezentacli znakowej na liczbow¹ w celu wykonania korelacji column wzglêdem res_name
+
+char2num<-function(x){
+groups = unique(x)
+as.numeric(factor(x, levels=groups))
+}
+
+cor(lines_filtered_res_name_to_classification3, use = "complete.obs") -> cor_res_name
+
+cor_res_name[,"res_name"] -> cor_res_name
+
+sapply(cor_res_name,round,digits=3) -> cor_res_name
+sort(abs(cor_res_name), decreasing=TRUE) -> cor_res_name
+head(cor_res_name,20) -> cor_res_name_to_analysis
+
+
+set.seed(100)
+
+lines_part %>% select(names(cor_res_name_to_analysis)) -> lines_part_res_name_analysis
+
+na.omit(lines_part_res_name_analysis) -> lines_part_res_name_analysis_more_than_2_without_NA
+
+lines_part_res_name_analysis_more_than_2 <- lines_part_res_name_analysis_more_than_2_without_NA %>% group_by(res_name) %>% filter(n()>1)
+
+set.seed(23)
+inTraining <- 
+    createDataPartition(
+        # atrybut do stratyfikacji
+        y = lines_part_res_name_analysis_more_than_2$res_name,
+        # procent w zbiorze ucz¹cym
+        p = .6,
+        # chcemy indeksy a nie listê
+        list = FALSE)
+
+ggplot(mapping=aes(alpha=0.1)) + 
+geom_density(aes(res_name, fill="green"), lines_part_res_name_analysis_more_than_2) + 
+ geom_density(aes(res_name, fill="red"), training) + 
+ geom_density(aes(res_name, fill="blue"), testing) + 
+ theme_minimal()
+
+training <- lines_part_res_name_analysis_more_than_2[ inTraining,]
+testing  <- lines_part_res_name_analysis_more_than_2[-inTraining,]
+
+ctrl <- trainControl(
+    # powtórzona ocena krzy¿owa
+    method = "repeatedcv",
+    # liczba podzia³ów
+    number = 2,
+    # liczba powtórzeñ
+    repeats = 5)
+
+set.seed(23)
+fit <- train(res_name ~ .,
+             data = training,
+             method = "rf",
+             trControl = ctrl,
+             # Paramter dla algorytmu ucz¹cego
+             ntree = 10)
+
+rfClasses <- predict(fit, newdata = testing)
+confusionMatrix(data = rfClasses, testing$res_name)
+
+ggplot(fit) + theme_bw()
+
+
 
 ```
 
