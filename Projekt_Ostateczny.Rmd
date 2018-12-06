@@ -26,8 +26,8 @@ library(knitr)
 #library(Metrics)
 library(ggplot2)
 library(rmarkdown)
-library(ggplus)
-library(ggforce)
+#library(ggplus)
+#library(ggforce)
 library(caret)
 ```
 
@@ -38,8 +38,8 @@ library(caret)
 #WSZYSTKIE
 #lines <- data.table::fread('all_summary.csv', sep = ';')
 #KILKA
-#set.seed(42)
-#lines_part <- read.csv2('all_summary.csv',dec='.',nrows = 1000,stringsAsFactors = FALSE)
+set.seed(42)
+lines_part <- read.csv2('all_summary.csv',dec='.',nrows = 1000,stringsAsFactors = FALSE)
 #kable(lines, format = "latex", booktabs = TRUE)
 ```
 ## Filtrowanie res_name
@@ -171,7 +171,7 @@ ggplot(lines_filtered_res_name_10,
 
 #head(parts_01_trans,100) -> aaa
 
-#Aby ni by³o pêtli czy dany pomiar jest danej wartoœci i na tej wartoœci wrap
+#Aby ni by?o p?tli czy dany pomiar jest danej warto?ci i na tej warto?ci wrap
 #mdata <- melt(aaa, id=c("r1"))
 
 
@@ -309,11 +309,11 @@ d1 <- lines_part_X_analysis_row_without_NA[ idx,]
 d2  <- lines_part_X_analysis_row_without_NA[-idx,]
 
 ctrl <- trainControl(
-    # powtórzona ocena krzy¿owa
+    # powt?rzona ocena krzy?owa
     method = "repeatedcv",
-    # liczba podzia³ów
+    # liczba podzia??w
     number = 2,
-    # liczba powtórzeñ
+    # liczba powt?rze?
     repeats = 5)
 
 #df <- subset(d1, select = -c(local_res_atom_non_h_count) )
@@ -375,17 +375,18 @@ lines_filtered_res_name[c('res_name', 'pdb_code', 'res_coverage', 'fc_col', 'blo
 
 lines_filtered_res_name_to_classification <- subset(lines_filtered_res_name, select = -c(title,pdb_code,res_id,skeleton_data,fo_col,fc_col,res_coverage,blob_coverage) )
 
+char2num<-function(x){
+groups = unique(x)
+as.numeric(factor(x, levels=groups))
+}
 
 lines_filtered_res_name_to_classification2 <-transform(lines_filtered_res_name_to_classification, chain_id = char2num(chain_id))
 
 lines_filtered_res_name_to_classification3 <-transform(lines_filtered_res_name_to_classification2, res_name = char2num(res_name))
 
-# Zmiana z reprezentacli znakowej na liczbow¹ w celu wykonania korelacji column wzglêdem res_name
+# Zmiana z reprezentacli znakowej na liczbow? w celu wykonania korelacji column wzgl?dem res_name
 
-char2num<-function(x){
-groups = unique(x)
-as.numeric(factor(x, levels=groups))
-}
+
 
 cor(lines_filtered_res_name_to_classification3, use = "complete.obs") -> cor_res_name
 
@@ -404,39 +405,49 @@ na.omit(lines_part_res_name_analysis) -> lines_part_res_name_analysis_more_than_
 
 lines_part_res_name_analysis_more_than_2 <- lines_part_res_name_analysis_more_than_2_without_NA %>% group_by(res_name) %>% filter(n()>1)
 
+lines_part_res_name_analysis_more_than_3 <-transform(lines_part_res_name_analysis_more_than_2, res_name = factor(res_name))
+
+
 set.seed(23)
+
 inTraining <- 
     createDataPartition(
         # atrybut do stratyfikacji
-        y = lines_part_res_name_analysis_more_than_2$res_name,
-        # procent w zbiorze ucz¹cym
-        p = .6,
-        # chcemy indeksy a nie listê
+        y = lines_part_res_name_analysis_more_than_3$res_name,
+        # procent w zbiorze ucz?cym
+        p = .5,
+        # chcemy indeksy a nie list?
         list = FALSE)
 
 ggplot(mapping=aes(alpha=0.1)) + 
-geom_density(aes(res_name, fill="green"), lines_part_res_name_analysis_more_than_2) + 
+geom_density(aes(res_name, fill="green"), lines_part_res_name_analysis_more_than_3) + 
  geom_density(aes(res_name, fill="red"), training) + 
  geom_density(aes(res_name, fill="blue"), testing) + 
  theme_minimal()
 
-training <- lines_part_res_name_analysis_more_than_2[ inTraining,]
-testing  <- lines_part_res_name_analysis_more_than_2[-inTraining,]
+lines_part_res_name_analysis_more_than_3$res_name <- factor(lines_part_res_name_analysis_more_than_3$res_name)
+
+training <- lines_part_res_name_analysis_more_than_3[ inTraining,]
+testing  <- lines_part_res_name_analysis_more_than_3[-inTraining,]
 
 ctrl <- trainControl(
-    # powtórzona ocena krzy¿owa
+    # powt?rzona ocena krzy?owa
     method = "repeatedcv",
-    # liczba podzia³ów
+    # liczba podzia??w
     number = 2,
-    # liczba powtórzeñ
+    # liczba powt?rze?
     repeats = 5)
 
+
+
 set.seed(23)
-fit <- train(res_name ~ .,
+training$res_name <- factor(training$res_name)
+training2 <- droplevels(training)
+fit <- train(as.factor(res_name) ~ .,
              data = training,
              method = "rf",
              trControl = ctrl,
-             # Paramter dla algorytmu ucz¹cego
+             # Paramter dla algorytmu ucz?cego
              ntree = 10)
 
 rfClasses <- predict(fit, newdata = testing)
